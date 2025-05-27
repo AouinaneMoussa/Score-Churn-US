@@ -1,0 +1,81 @@
+{
+  "info": {
+    "name": "Churn Prediction API Tests",
+    "description": "Collection Postman pour tester l'API FastAPI de pr\u00e9diction de churn",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://127.0.0.1:5000/health",
+          "protocol": "http",
+          "host": [
+            "127.0.0.1"
+          ],
+          "port": "5000",
+          "path": [
+            "health"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Pr\u00e9diction - Donn\u00e9es valides",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"Tenure\": 10.0,\n  \"PreferredLoginDevice\": \"Mobile\",\n  \"CityTier\": \"1\",\n  \"WarehouseToHome\": 15.0,\n  \"PreferredPaymentMode\": \"Credit Card\",\n  \"Gender\": \"Male\",\n  \"HourSpendOnApp\": 3.0,\n  \"NumberOfDeviceRegistered\": 3,\n  \"PreferedOrderCat\": \"Mobile\",\n  \"SatisfactionScore\": 3,\n  \"MaritalStatus\": \"Married\",\n  \"NumberOfAddress\": 2,\n  \"Complain\": \"0 (Non)\",\n  \"OrderAmountHikeFromlastYear\": 15.0,\n  \"CouponUsed\": 1.0,\n  \"OrderCount\": 2.0,\n  \"DaySinceLastOrder\": 5.0,\n  \"CashbackAmount\": 150.0\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:5000/predict",
+          "protocol": "http",
+          "host": [
+            "127.0.0.1"
+          ],
+          "port": "5000",
+          "path": [
+            "predict"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Pr\u00e9diction - Donn\u00e9es manquantes (imputation)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"Tenure\": null,\n  \"PreferredLoginDevice\": \"Computer\",\n  \"CityTier\": \"2\",\n  \"WarehouseToHome\": 20.0,\n  \"PreferredPaymentMode\": \"UPI\",\n  \"Gender\": \"Female\",\n  \"HourSpendOnApp\": null,\n  \"NumberOfDeviceRegistered\": 2,\n  \"PreferedOrderCat\": \"Fashion\",\n  \"SatisfactionScore\": 4,\n  \"MaritalStatus\": \"Single\",\n  \"NumberOfAddress\": 1,\n  \"Complain\": \"1 (Oui)\",\n  \"OrderAmountHikeFromlastYear\": 10.0,\n  \"CouponUsed\": 0.0,\n  \"OrderCount\": 1.0,\n  \"DaySinceLastOrder\": 10.0,\n  \"CashbackAmount\": 120.0\n}"
+        },
+        "url": {
+          "raw": "http://127.0.0.1:5000/predict",
+          "protocol": "http",
+          "host": [
+            "127.0.0.1"
+          ],
+          "port": "5000",
+          "path": [
+            "predict"
+          ]
+        }
+      }
+    }
+  ]
+}
