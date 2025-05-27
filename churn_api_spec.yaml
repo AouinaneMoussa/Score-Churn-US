@@ -1,12 +1,12 @@
 #%RAML 1.0
 title: API de Prédiction de Churn Client
-version: v1 # Version de l'API (distincte de la version du modèle ML)
+version: v1
 description: |
   API pour prédire la probabilité de churn d'un client
   basée sur ses caractéristiques.
 mediaType: application/json
 
-# Définition des types de données réutilisables (équivalents des modèles Pydantic)
+# Définition des types de données réutilisables
 types:
   ChurnInput:
     type: object
@@ -15,7 +15,7 @@ types:
       Tenure:
         type: number
         format: float
-        required: false # Optionnel, sera imputé si manquant ou null
+        required: false
         description: "Ancienneté du client en mois."
         example: 10.0
       PreferredLoginDevice:
@@ -25,7 +25,7 @@ types:
         example: "Mobile"
         enum: ["Mobile", "Computer"]
       CityTier:
-        type: string # L'API FastAPI attend un string, la conversion en int se fait en interne
+        type: string
         required: false
         description: "Niveau de la ville (Tier) sous forme de chaîne de caractères."
         example: "1"
@@ -55,11 +55,11 @@ types:
         description: "Heures moyennes passées sur l'application par mois."
         example: 3.0
       NumberOfDeviceRegistered:
-        type: integer # Attendu comme entier
+        type: integer
         required: false
         description: "Nombre d'appareils enregistrés."
         example: 3
-      PreferedOrderCat: # Orthographe comme dans X_original_columns
+      PreferedOrderCat:
         type: string
         required: false
         description: "Catégorie de commande préférée."
@@ -84,7 +84,7 @@ types:
         description: "Nombre d'adresses enregistrées."
         example: 2
       Complain:
-        type: string # L'API FastAPI attend un string, la conversion en int se fait en interne
+        type: string
         required: false
         description: "Indique si le client a déposé une plainte (ex: '0 (Non)', '1 (Oui)', '0', '1')."
         example: "0 (Non)"
@@ -95,19 +95,19 @@ types:
         description: "Augmentation du montant des commandes depuis l'an dernier (%)."
         example: 15.0
       CouponUsed:
-        type: number # Dans l'API, traité comme float
+        type: number
         format: float
         required: false
         description: "Nombre de coupons utilisés le mois dernier."
         example: 1.0
       OrderCount:
-        type: number # Dans l'API, traité comme float
+        type: number
         format: float
         required: false
         description: "Nombre de commandes le mois dernier."
         example: 2.0
       DaySinceLastOrder:
-        type: number # Dans l'API, traité comme float
+        type: number
         format: float
         required: false
         description: "Nombre de jours depuis la dernière commande."
@@ -158,24 +158,58 @@ types:
         description: "Indique si les valeurs d'imputation du training ont été chargées."
         example: true
 
-  ErrorResponse:
+  ErrorDetailItem: # Pour la réponse 422 de FastAPI
     type: object
-    description: Structure standard pour les réponses d'erreur.
     properties:
-      detail: # Correspond à la structure de HTTPException de FastAPI
-        type: string | array # Peut être une chaîne ou un tableau de détails (pour 422)
-        description: "Message ou détails de l'erreur."
-        example: "Invalid numeric value for Tenure: 'abc'"
+      loc:
+        type: array
+        items:
+          type: string | integer
+      msg:
+        type: string
+      type:
+        type: string
 
-# Définition des schémas de sécurité (Exemple avec Clé API)
+  ErrorResponse400: # Erreur pour 400
+    type: object
+    description: Structure pour les réponses d'erreur 400.
+    properties:
+      detail:
+        type: string
+        description: "Message de l'erreur."
+        example: "Invalid value for Complain: 'Maybe'. Expected '0 (Non)', '1 (Oui)', '0', '1', 'true', or 'false'."
+
+  ErrorResponse422: # Erreur pour 422
+    type: object
+    description: Structure pour les réponses d'erreur 422 (Validation FastAPI).
+    properties:
+      detail:
+        type: ErrorDetailItem[] # Tableau d'objets ErrorDetailItem
+        description: "Détails de l'erreur de validation."
+
+  ErrorResponse500: # Erreur pour 500
+    type: object
+    description: Structure pour les réponses d'erreur 500.
+    properties:
+      detail:
+        type: string
+        description: "Message de l'erreur interne."
+        example: "Erreur interne du serveur lors de la prédiction: Une erreur inattendue s'est produite."
+
+
+# Définition des schémas de sécurité
 securitySchemes:
   apiKeyHeader:
-    type: API Key
+    type: Pass Through # Type générique pour les clés API dans l'en-tête en RAML 1.0
+    description: |
+      Clé API requise pour l'authentification.
+      La clé doit être fournie dans l'en-tête X-API-KEY.
     describedBy:
       headers:
-        X-API-KEY: # Nom du header pour la clé
+        X-API-KEY:
           type: string
-          description: "Clé API requise pour accéder à cette ressource."
+          description: "Votre clé API unique."
+          required: true
       responses:
         401:
           description: |
@@ -185,14 +219,13 @@ securitySchemes:
             Interdit. La clé API est valide mais n'a pas les permissions nécessaires.
 
 # Appliquer la sécurité à toutes les ressources par défaut
-securedBy: [apiKeyHeader] # Optionnel, vous pouvez l'appliquer par ressource/méthode
+securedBy: [apiKeyHeader]
 
 # Définition des ressources de l'API
 /predict:
   displayName: Prédiction de Churn
   description: Permet d'obtenir une prédiction de churn pour un client.
   post:
-    summary: Prédit le churn client.
     description: |
       Soumettez les caractéristiques d'un client pour obtenir une prédiction
       sur sa probabilité de churn. Les champs optionnels non fournis ou `null`
@@ -200,7 +233,7 @@ securedBy: [apiKeyHeader] # Optionnel, vous pouvez l'appliquer par ressource/mé
     body:
       application/json:
         type: ChurnInput
-        example: | # Exemple de corps de requête complet
+        example: |
           {
             "Tenure": 10.0,
             "PreferredLoginDevice": "Mobile",
@@ -227,53 +260,42 @@ securedBy: [apiKeyHeader] # Optionnel, vous pouvez l'appliquer par ressource/mé
         body:
           application/json:
             type: ChurnOutput
-            example: | # Exemple de réponse succès
+            example: |
               {
                 "predictionLabel": "Le client risque de churner",
                 "churnProbability": 85.25,
                 "isChurnRisk": true,
                 "modelVersion": "1.1.0"
               }
-      400: # Erreur de validation logique (ex: valeur de Complain invalide)
+      400:
         description: Requête invalide due à des données incorrectes qui ne peuvent être converties ou traitées.
         body:
           application/json:
-            type: ErrorResponse # Utilise le type d'erreur générique
+            type: ErrorResponse400
             example: |
               {
                 "detail": "Invalid value for Complain: 'Maybe'. Expected '0 (Non)', '1 (Oui)', '0', '1', 'true', or 'false'."
               }
-      422: # Erreur de validation de type Pydantic/FastAPI
+      422:
         description: Entité non processable - la structure ou les types de données de la requête sont incorrects.
         body:
           application/json:
-            # La structure de réponse 422 de FastAPI est un tableau de détails.
-            # Vous pouvez la modéliser plus précisément si nécessaire ou utiliser un type 'any'.
-            type: array 
-            items:
-              type: object
-              properties:
-                loc:
-                  type: array
-                  items:
-                    type: string | integer
-                msg:
-                  type: string
-                type:
-                  type: string # Anciennement 'ctx' dans les versions plus anciennes de Pydantic
+            type: ErrorResponse422
             example: |
-              [
-                {
-                  "loc": ["body", "Tenure"],
-                  "msg": "Input should be a valid number, unable to parse string as a number",
-                  "type": "float_parsing"
-                }
-              ]
+              {
+                "detail": [
+                  {
+                    "loc": ["body", "Tenure"],
+                    "msg": "Input should be a valid number, unable to parse string as a number",
+                    "type": "float_parsing"
+                  }
+                ]
+              }
       500:
         description: Erreur interne du serveur.
         body:
           application/json:
-            type: ErrorResponse
+            type: ErrorResponse500
             example: |
               {
                 "detail": "Erreur interne du serveur lors de la prédiction: Une erreur inattendue s'est produite."
@@ -283,7 +305,7 @@ securedBy: [apiKeyHeader] # Optionnel, vous pouvez l'appliquer par ressource/mé
   displayName: Health Check
   description: Vérifie l'état de santé et la disponibilité de l'API.
   get:
-    summary: Obtient l'état de santé de l'API.
+    description: Obtient l'état de santé de l'API.
     responses:
       200:
         description: L'API est opérationnelle.
@@ -296,11 +318,11 @@ securedBy: [apiKeyHeader] # Optionnel, vous pouvez l'appliquer par ressource/mé
                 "modelVersion": "1.1.0",
                 "imputationValuesLoaded": true
               }
-      500: # Si, par exemple, les modèles ne pouvaient pas être chargés au démarrage
+      500:
         description: Erreur interne, l'API n'est peut-être pas pleinement opérationnelle.
         body:
           application/json:
-            type: ErrorResponse
+            type: ErrorResponse500
             example: |
               {
                 "detail": "Service non disponible en raison d'une erreur de configuration."
