@@ -1,0 +1,307 @@
+#%RAML 1.0
+title: API de Prédiction de Churn Client
+version: v1 # Version de l'API (distincte de la version du modèle ML)
+description: |
+  API pour prédire la probabilité de churn d'un client
+  basée sur ses caractéristiques.
+mediaType: application/json
+
+# Définition des types de données réutilisables (équivalents des modèles Pydantic)
+types:
+  ChurnInput:
+    type: object
+    description: Caractéristiques du client pour la prédiction de churn.
+    properties:
+      Tenure:
+        type: number
+        format: float
+        required: false # Optionnel, sera imputé si manquant ou null
+        description: "Ancienneté du client en mois."
+        example: 10.0
+      PreferredLoginDevice:
+        type: string
+        required: false
+        description: "Appareil de connexion préféré."
+        example: "Mobile"
+        enum: ["Mobile", "Computer"]
+      CityTier:
+        type: string # L'API FastAPI attend un string, la conversion en int se fait en interne
+        required: false
+        description: "Niveau de la ville (Tier) sous forme de chaîne de caractères."
+        example: "1"
+        enum: ["1", "2", "3"]
+      WarehouseToHome:
+        type: number
+        format: float
+        required: false
+        description: "Distance entre l'entrepôt et le domicile en km."
+        example: 15.0
+      PreferredPaymentMode:
+        type: string
+        required: false
+        description: "Mode de paiement préféré."
+        example: "Credit Card"
+        enum: ["Credit Card", "Debit Card", "E-Wallet", "UPI", "Cash on Delivery"]
+      Gender:
+        type: string
+        required: false
+        description: "Genre du client."
+        example: "Male"
+        enum: ["Male", "Female"]
+      HourSpendOnApp:
+        type: number
+        format: float
+        required: false
+        description: "Heures moyennes passées sur l'application par mois."
+        example: 3.0
+      NumberOfDeviceRegistered:
+        type: integer # Attendu comme entier
+        required: false
+        description: "Nombre d'appareils enregistrés."
+        example: 3
+      PreferedOrderCat: # Orthographe comme dans X_original_columns
+        type: string
+        required: false
+        description: "Catégorie de commande préférée."
+        example: "Mobile"
+        enum: ["Laptop & Accessory", "Mobile", "Fashion", "Grocery", "Others"]
+      SatisfactionScore:
+        type: integer
+        required: false
+        description: "Score de satisfaction (1 à 5)."
+        example: 3
+        minimum: 1
+        maximum: 5
+      MaritalStatus:
+        type: string
+        required: false
+        description: "Statut marital."
+        example: "Married"
+        enum: ["Single", "Married", "Divorced"]
+      NumberOfAddress:
+        type: integer
+        required: false
+        description: "Nombre d'adresses enregistrées."
+        example: 2
+      Complain:
+        type: string # L'API FastAPI attend un string, la conversion en int se fait en interne
+        required: false
+        description: "Indique si le client a déposé une plainte (ex: '0 (Non)', '1 (Oui)', '0', '1')."
+        example: "0 (Non)"
+      OrderAmountHikeFromlastYear:
+        type: number
+        format: float
+        required: false
+        description: "Augmentation du montant des commandes depuis l'an dernier (%)."
+        example: 15.0
+      CouponUsed:
+        type: number # Dans l'API, traité comme float
+        format: float
+        required: false
+        description: "Nombre de coupons utilisés le mois dernier."
+        example: 1.0
+      OrderCount:
+        type: number # Dans l'API, traité comme float
+        format: float
+        required: false
+        description: "Nombre de commandes le mois dernier."
+        example: 2.0
+      DaySinceLastOrder:
+        type: number # Dans l'API, traité comme float
+        format: float
+        required: false
+        description: "Nombre de jours depuis la dernière commande."
+        example: 5.0
+      CashbackAmount:
+        type: number
+        format: float
+        required: false
+        description: "Montant moyen de cashback en euros."
+        example: 150.0
+
+  ChurnOutput:
+    type: object
+    description: Résultat de la prédiction de churn.
+    properties:
+      predictionLabel:
+        type: string
+        description: "Label de la prédiction (ex: 'Le client risque de churner')."
+        example: "Le client risque de churner"
+      churnProbability:
+        type: number
+        format: float
+        description: "Probabilité de churn en pourcentage."
+        example: 85.25
+      isChurnRisk:
+        type: boolean
+        description: "Indique si le client est considéré comme un risque de churn."
+        example: true
+      modelVersion:
+        type: string
+        description: "Version du modèle de machine learning utilisé pour la prédiction."
+        example: "1.1.0"
+
+  HealthOutput:
+    type: object
+    description: État de santé de l'API.
+    properties:
+      status:
+        type: string
+        description: "État général de l'API."
+        example: "healthy"
+      modelVersion:
+        type: string
+        description: "Version du modèle de machine learning actuellement chargé."
+        example: "1.1.0"
+      imputationValuesLoaded:
+        type: boolean
+        description: "Indique si les valeurs d'imputation du training ont été chargées."
+        example: true
+
+  ErrorResponse:
+    type: object
+    description: Structure standard pour les réponses d'erreur.
+    properties:
+      detail: # Correspond à la structure de HTTPException de FastAPI
+        type: string | array # Peut être une chaîne ou un tableau de détails (pour 422)
+        description: "Message ou détails de l'erreur."
+        example: "Invalid numeric value for Tenure: 'abc'"
+
+# Définition des schémas de sécurité (Exemple avec Clé API)
+securitySchemes:
+  apiKeyHeader:
+    type: API Key
+    describedBy:
+      headers:
+        X-API-KEY: # Nom du header pour la clé
+          type: string
+          description: "Clé API requise pour accéder à cette ressource."
+      responses:
+        401:
+          description: |
+            Non autorisé. La clé API est manquante ou invalide.
+        403:
+          description: |
+            Interdit. La clé API est valide mais n'a pas les permissions nécessaires.
+
+# Appliquer la sécurité à toutes les ressources par défaut
+securedBy: [apiKeyHeader] # Optionnel, vous pouvez l'appliquer par ressource/méthode
+
+# Définition des ressources de l'API
+/predict:
+  displayName: Prédiction de Churn
+  description: Permet d'obtenir une prédiction de churn pour un client.
+  post:
+    summary: Prédit le churn client.
+    description: |
+      Soumettez les caractéristiques d'un client pour obtenir une prédiction
+      sur sa probabilité de churn. Les champs optionnels non fournis ou `null`
+      seront imputés par le modèle.
+    body:
+      application/json:
+        type: ChurnInput
+        example: | # Exemple de corps de requête complet
+          {
+            "Tenure": 10.0,
+            "PreferredLoginDevice": "Mobile",
+            "CityTier": "1",
+            "WarehouseToHome": 15.0,
+            "PreferredPaymentMode": "Credit Card",
+            "Gender": "Male",
+            "HourSpendOnApp": 3.0,
+            "NumberOfDeviceRegistered": 3,
+            "PreferedOrderCat": "Mobile",
+            "SatisfactionScore": 3,
+            "MaritalStatus": "Married",
+            "NumberOfAddress": 2,
+            "Complain": "0 (Non)",
+            "OrderAmountHikeFromlastYear": 15.0,
+            "CouponUsed": 1.0,
+            "OrderCount": 2.0,
+            "DaySinceLastOrder": 5.0,
+            "CashbackAmount": 150.0
+          }
+    responses:
+      200:
+        description: Prédiction retournée avec succès.
+        body:
+          application/json:
+            type: ChurnOutput
+            example: | # Exemple de réponse succès
+              {
+                "predictionLabel": "Le client risque de churner",
+                "churnProbability": 85.25,
+                "isChurnRisk": true,
+                "modelVersion": "1.1.0"
+              }
+      400: # Erreur de validation logique (ex: valeur de Complain invalide)
+        description: Requête invalide due à des données incorrectes qui ne peuvent être converties ou traitées.
+        body:
+          application/json:
+            type: ErrorResponse # Utilise le type d'erreur générique
+            example: |
+              {
+                "detail": "Invalid value for Complain: 'Maybe'. Expected '0 (Non)', '1 (Oui)', '0', '1', 'true', or 'false'."
+              }
+      422: # Erreur de validation de type Pydantic/FastAPI
+        description: Entité non processable - la structure ou les types de données de la requête sont incorrects.
+        body:
+          application/json:
+            # La structure de réponse 422 de FastAPI est un tableau de détails.
+            # Vous pouvez la modéliser plus précisément si nécessaire ou utiliser un type 'any'.
+            type: array 
+            items:
+              type: object
+              properties:
+                loc:
+                  type: array
+                  items:
+                    type: string | integer
+                msg:
+                  type: string
+                type:
+                  type: string # Anciennement 'ctx' dans les versions plus anciennes de Pydantic
+            example: |
+              [
+                {
+                  "loc": ["body", "Tenure"],
+                  "msg": "Input should be a valid number, unable to parse string as a number",
+                  "type": "float_parsing"
+                }
+              ]
+      500:
+        description: Erreur interne du serveur.
+        body:
+          application/json:
+            type: ErrorResponse
+            example: |
+              {
+                "detail": "Erreur interne du serveur lors de la prédiction: Une erreur inattendue s'est produite."
+              }
+
+/health:
+  displayName: Health Check
+  description: Vérifie l'état de santé et la disponibilité de l'API.
+  get:
+    summary: Obtient l'état de santé de l'API.
+    responses:
+      200:
+        description: L'API est opérationnelle.
+        body:
+          application/json:
+            type: HealthOutput
+            example: |
+              {
+                "status": "healthy",
+                "modelVersion": "1.1.0",
+                "imputationValuesLoaded": true
+              }
+      500: # Si, par exemple, les modèles ne pouvaient pas être chargés au démarrage
+        description: Erreur interne, l'API n'est peut-être pas pleinement opérationnelle.
+        body:
+          application/json:
+            type: ErrorResponse
+            example: |
+              {
+                "detail": "Service non disponible en raison d'une erreur de configuration."
+              }
