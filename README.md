@@ -20,14 +20,25 @@ Anticiper les désabonnements (churn) des clients pour :
 
 ```mermaid
 graph TD
-    A[Data CSV] --> B[Nettoyage / Préparation]
+    subgraph Preparation_Notebook_01
+    A[Dataset CSV - clients] --> B[Nettoyage données - NaN, formats]
     B --> C[Encodage OneHot + Standardisation]
-    C --> D[Split Train / Test]
-    D --> E[Modélisation (LogReg, DT, XGBoost)]
-    E --> F[Hypertuning XGBoost]
-    F --> G[Sauvegarde modèle]
-    G --> H[Interface Gradio]
-    H --> I[Prédiction Churn utilisateur]
+    C --> D[Split Train/Test]
+    D --> E[Export CSV - X_train, X_test...]
+    end
+
+    subgraph Modelisation_Notebook_02
+    E --> F[Train modèles - LogReg, DT, XGB]
+    F --> G[Tuning hyperparamètres - XGBoost]
+    G --> H[Sauvegarde modèle - joblib]
+    end
+
+    subgraph Exploitation_Notebook_03
+    H --> I[UI Gradio]
+    I --> J[Inputs utilisateur non encodés]
+    J --> K[Transformation automatique]
+    K --> L[Prédiction proba churn]
+    end
 ```
 
 ---
