@@ -1,5 +1,7 @@
 # api_exploitation.py
 
+# api_exploitation.py
+
 import os
 import joblib
 import pandas as pd
@@ -49,7 +51,8 @@ num_cols_for_preprocessor = [col for col in X_original_columns if col not in cat
 app = Flask(__name__)
 
 # --- Logique de Prédiction ---
-def get_churn_prediction_details(data_input: dict) -> tuple[dict, int]:
+# MODIFICATION 1: Mettre à jour la signature de la fonction pour accepter customer_id
+def get_churn_prediction_details(data_input: dict, customer_id: str) -> tuple[dict, int]:
     try:
         input_dict = {}
         missing_required_fields = []
@@ -57,15 +60,10 @@ def get_churn_prediction_details(data_input: dict) -> tuple[dict, int]:
         for col_name in X_original_columns:
             value = data_input.get(col_name)
 
-            if value is None: # Gérer les None explicitement avant conversion de type
-                input_dict[col_name] = np.nan # Sera traité par l'imputation ci-dessous
-                # Vous pourriez vouloir vérifier si un champ requis est None ici, selon votre contrat d'API
-                # Par exemple, si 'Tenure' est toujours requis:
-                # if col_name == 'Tenure': # Remplacez par vos champs réellement requis
-                #    missing_required_fields.append(col_name)
-                continue # Passe à la colonne suivante
+            if value is None:
+                input_dict[col_name] = np.nan
+                continue
 
-            # Conversion de type et gestion spécifique
             if col_name in num_cols_for_preprocessor:
                 try:
                     input_dict[col_name] = float(value)
@@ -73,24 +71,19 @@ def get_churn_prediction_details(data_input: dict) -> tuple[dict, int]:
                     return {"error": f"Invalid numeric value for {col_name}: '{value}'"}, 400
             elif col_name == 'CityTier':
                 try:
-                    input_dict[col_name] = int(str(value)) # CityTier est traité comme cat. mais peut venir en int/str
+                    input_dict[col_name] = int(str(value))
                 except (ValueError, TypeError):
                     return {"error": f"Invalid value for CityTier: '{value}'. Expected '1', '2', or '3'."}, 400
             elif col_name == 'Complain':
-                complain_str = str(value).lower() # Convertir en minuscule pour plus de flexibilité
+                complain_str = str(value).lower()
                 if "1" in complain_str or complain_str == "true":
                     input_dict[col_name] = 1
                 elif "0" in complain_str or complain_str == "false":
                     input_dict[col_name] = 0
                 else:
-                    # Si la valeur n'est ni 0 ni 1 après conversion, elle est invalide
-                    # ou pourrait être traitée comme NaN pour imputation si cela a du sens
-                     return {"error": f"Invalid value for Complain: '{value}'. Expected '0 (Non)', '1 (Oui)', 0, 1, 'true', or 'false'."}, 400
-            else: # Colonnes catégorielles textuelles
+                    return {"error": f"Invalid value for Complain: '{value}'. Expected '0 (Non)', '1 (Oui)', 0, 1, 'true', or 'false'."}, 400
+            else:
                 input_dict[col_name] = str(value)
-
-        # if missing_required_fields:
-        #    return {"error": f"Missing required fields: {', '.join(missing_required_fields)}"}, 400
 
         df = pd.DataFrame([input_dict], columns=X_original_columns)
 
@@ -98,7 +91,6 @@ def get_churn_prediction_details(data_input: dict) -> tuple[dict, int]:
             if col in df.columns:
                 df[col] = df[col].replace(mapping)
 
-        # 4. Imputation des valeurs manquantes avec les valeurs du training
         imputed_cols_log = []
         fallback_imputed_cols_log = []
 
@@ -109,47 +101,40 @@ def get_churn_prediction_details(data_input: dict) -> tuple[dict, int]:
                     df[col].fillna(fill_value, inplace=True)
                     imputed_cols_log.append(f"'{col}' avec (training) '{fill_value}'")
                 else:
-                    # Ce cas arrive si l'input API a un NaN pour un champ qui était toujours rempli dans le train
-                    # (et donc n'a pas de valeur d'imputation sauvegardée pour cette colonne).
                     fallback_value = 0 if col in num_cols_for_preprocessor else "Unknown_API_Input"
                     df[col].fillna(fallback_value, inplace=True)
                     fallback_imputed_cols_log.append(f"'{col}' avec (fallback) '{fallback_value}'")
                     logging.warning(f"Colonne '{col}' avec NaN dans l'input mais pas de valeur d'imputation du training. Remplie avec la valeur de repli '{fallback_value}'.")
-            elif col not in df.columns: # Devrait être impossible si X_original_columns est bien utilisé
-                 logging.error(f"Logique d'erreur: la colonne '{col}' de X_original_columns n'est pas dans le DataFrame créé.")
-                 return {"error": f"Internal error: Missing expected model feature during DataFrame creation: {col}"}, 500
-
+            elif col not in df.columns:
+                logging.error(f"Logique d'erreur: la colonne '{col}' de X_original_columns n'est pas dans le DataFrame créé.")
+                return {"error": f"Internal error: Missing expected model feature during DataFrame creation: {col}"}, 500
 
         if imputed_cols_log:
             logging.info(f"Imputation (valeurs du training): {', '.join(imputed_cols_log)}")
         if fallback_imputed_cols_log:
             logging.warning(f"Imputation (valeurs de repli): {', '.join(fallback_imputed_cols_log)}")
 
-
         for col in cat_cols_for_preprocessor:
             if col in df.columns:
                 df[col] = df[col].astype('category')
-            else: # Ne devrait pas arriver
-                 return {"error": f"Internal error: Missing categorical column for preprocessing: {col}"}, 500
+            else:
+                return {"error": f"Internal error: Missing categorical column for preprocessing: {col}"}, 500
 
         df_processed = preprocessor.transform(df)
 
         proba_churn = model.predict_proba(df_processed)[0][1]
         prediction_val = model.predict(df_processed)[0]
 
-        # Dans la fonction get_churn_prediction_details de api_exploitation.py
-
-        # ... (calcul de proba_churn et prediction_val) ...
-
         prediction_label = "Le client risque de churner" if prediction_val == 1 else "Le client semble fidèle"
         
-        # Conversion explicite en types Python natifs pour la sérialisation JSON
-        is_churn_risk = bool(prediction_val == 1) # Assure un booléen Python
-        churn_probability_python_float = float(round(proba_churn * 100, 2)) # Convertit en float Python
+        is_churn_risk = bool(prediction_val == 1)
+        churn_probability_python_float = float(round(proba_churn * 100, 2))
 
+        # MODIFICATION 2: Ajouter la clé "CustomerID" au dictionnaire de la réponse
         response_payload = {
+            "CustomerID": customer_id, # <-- AJOUTÉ ICI
             "predictionLabel": prediction_label,
-            "churnProbability": churn_probability_python_float, # Utiliser la valeur convertie
+            "churnProbability": churn_probability_python_float,
             "isChurnRisk": is_churn_risk,
             "modelVersion": MODEL_VERSION
         }
@@ -168,15 +153,14 @@ def predict_endpoint():
     if not input_data:
         return jsonify({"error": "No input data provided"}), 400
     
-    # Vérifier que tous les X_original_columns sont présents ou peuvent être None
-    # for col_name in X_original_columns:
-    #    if col_name not in input_data:
-    #        # Décidez si c'est une erreur ou si None/NaN est implicite et sera imputé
-    #        # Pour être strict :
-    #        # return jsonify({"error": f"Missing required field in input: {col_name}"}), 400
-    #        pass # On laisse la logique d'imputation gérer les None plus tard
+    # MODIFICATION 3: Extraire le CustomerID du corps de la requête.
+    # .get() retourne None si la clé n'existe pas, ce qui évite une erreur.
+    customer_id = input_data.get("CustomerID")
+    if not customer_id:
+        return jsonify({"error": "Missing required field in input: CustomerID"}), 400
 
-    response_data, status_code = get_churn_prediction_details(input_data)
+    # MODIFICATION 4: Passer le customer_id à la fonction de prédiction
+    response_data, status_code = get_churn_prediction_details(input_data, customer_id)
     return jsonify(response_data), status_code
 
 @app.route('/health', methods=['GET'])
@@ -186,6 +170,4 @@ def health_check():
 # --- Exécution de l'application ---
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
-    # Pour la production, utilisez un serveur WSGI comme Gunicorn:
-    # gunicorn --workers 4 --bind 0.0.0.0:5000 api_exploitation:app
-    app.run(host='0.0.0.0', port=port, debug=False) # debug=False pour la prod
+    app.run(host='0.0.0.0', port=port, debug=False)
